@@ -14,25 +14,69 @@ import (
 	"time"
 )
 
+
+
+type Endpointer interface{
+  HandleHttp(w http.ResponseWriter, r *http.Request)
+  GetRoute() (string, string)
+}
+
+type EventHandler interface{
+  HandleEvent(event interface{})
+}
+
+type Validater interface{
+  ValidateEvent(event interface{}) (bool, string)
+}
+
+
 var eventHandlers = make([]EventHandler,0)
 var validaters = make([]Validater,0)
 
 func main() {
 
-	//load all from data
-	files, err := ioutil.ReadDir("data")
 
-	for _, file := range files {
-		if strings.HasSuffix(file.Name(), ".json") {
 
-			filebyte, error := ioutil.ReadFile("data/" + file.Name())
-			if error != nil {
-				log.Fatal("Could not read file " + file.Name() + " to parse")
-				os.Exit(1)
-			}
+  validateUniqueUsername := &ValidateUniqueUsername{}
+  eventHandlers = append(eventHandlers, validateUniqueUsername)
 
-			var se StoredEvent
-			json.Unmarshal(filebyte, &se)
+  validaters = append(validaters, validateUniqueUsername)
+
+	r := mux.NewRouter()
+
+  getIndexEndpoint := GetIndexEndpoint{}
+  HandleEndpoint(&getIndexEndpoint, r)
+
+  registerUserEndpoint := RegisterUserEndpoint{}
+  HandleEndpoint(&registerUserEndpoint, r)
+
+  getUsersEndpoint := GetUsersEndpoint{}
+  eventHandlers = append(eventHandlers, &getUsersEndpoint)
+  HandleEndpoint(&getUsersEndpoint, r)
+
+  changeUsernameEndpoint := ChangeUsernameEndpoint{}
+  HandleEndpoint(&changeUsernameEndpoint, r)
+
+  getUserByUsernameEndpoint := GetUserByUsernameEndpoint{}
+  eventHandlers = append(eventHandlers, &getUserByUsernameEndpoint)
+  HandleEndpoint(&getUserByUsernameEndpoint, r)
+
+
+
+  //load all from data
+  files, err := ioutil.ReadDir("data")
+
+  for _, file := range files {
+    if strings.HasSuffix(file.Name(), ".json") {
+
+      filebyte, error := ioutil.ReadFile("data/" + file.Name())
+      if error != nil {
+        log.Fatal("Could not read file " + file.Name() + " to parse")
+        os.Exit(1)
+      }
+
+      var se StoredEvent
+      json.Unmarshal(filebyte, &se)
 
       event := Event{Name: se.Name, HappenedOn : se.HappenedOn}
 
@@ -49,48 +93,18 @@ func main() {
         panic("What?? " + se.MetadataTypeName)
       }
 
-			// sourceType := reflect.TypeOf(e)
+      // sourceType := reflect.TypeOf(e)
 
    //    fmt.Printf("Result err: %#v", sourceType)
-			// fmt.Printf("Result err: %s", sourceType.Name())
-			PublishEventWithoutValidation(event.Name, event.Metadata)
+      // fmt.Printf("Result err: %s", sourceType.Name())
+      fmt.Printf("Result event: %s", event)
+      PublishEventWithoutValidation(event.Name, event.Metadata)
       eventCounter ++
 
-		}
-	}
+    }
+  }
 
-	//sort (date)
-	//replay events
-  validateUniqueUsername := &ValidateUniqueUsername{}
-  eventHandlers = append(eventHandlers, validateUniqueUsername)
 
-  validaters = append(validaters, validateUniqueUsername)
-
-	r := mux.NewRouter()
-
-  getIndexEndpoint := GetIndexEndpoint{}
-  // eventHandlers = append(eventHandlers, getIndexEndpoint)
-  HandleEndpoint(&getIndexEndpoint, r)
-
-  registerUserEndpoint := RegisterUserEndpoint{}
-  // eventHandlers = append(eventHandlers, registerUserEndpoint)
-  HandleEndpoint(&registerUserEndpoint, r)
-
-  getUsersEndpoint := GetUsersEndpoint{}
-  eventHandlers = append(eventHandlers, &getUsersEndpoint)
-  HandleEndpoint(&getUsersEndpoint, r)
-
-  changeUsernameEndpoint := ChangeUsernameEndpoint{}
-  HandleEndpoint(&changeUsernameEndpoint, r)
-
-  getUserByUsernameEndpoint := GetUserByUsernameEndpoint{}
-  eventHandlers = append(eventHandlers, &getUserByUsernameEndpoint)
-  HandleEndpoint(&getUserByUsernameEndpoint, r)
-
-	// r.HandleFunc("/reg", RegisterUser)
-	// r.HandleFunc("/users", GetUsers)
-  // r.HandleFunc("/change", ChangeUsername)
-	// r.HandleFunc("/user", GetUserByUsername)
 	http.Handle("/", r)
 	err2 := http.ListenAndServe(":8080", nil)
 	if err2 != nil {
@@ -179,35 +193,70 @@ func PublishEvent(name string, metadata interface{}) (success bool, message stri
         return false, validationMessage
       }
   }
-  success = true
-  message = ""
 
   StoreEvent(Event{Name: name, Metadata: metadata, HappenedOn: time.Now()})
 
   PublishEventWithoutValidation(name, metadata)
-  return
 
-
-	// if name == "UserRegistered" {
- //    // GetUsersHandleRegisterUser(metadata.(UserRegisteredEvent))
- //    GetUserByUsernameHandleRegisterUser(metadata.(UserRegisteredEvent))
-	// 	ValidateUniqueUsernameHandleRegisterUser(metadata.(UserRegisteredEvent))
-	// }
-	// if name == "UsernameChanged" {
- //    // GetUsersHandleChangeUsername(metadata.(ChangeUsernameData))
- //    GetUserByUsernameHandleChangeUsername(metadata.(ChangeUsernameData))
-	// 	ValidateUniqueUsernameHandleChangeUsername(metadata.(ChangeUsernameData))
-	// }
-
-
+  return true, ""
 }
 
+
+// **** Events
 
 type UserRegisteredEvent struct{
   Username string
 }
 
+type ChangeUsernameData struct {
+  OriginalName string
+  NewName      string
+}
 
+
+// **** Endpoints
+
+
+// ***** GetIndex
+
+type GetIndexEndpoint struct{
+
+}
+
+func (this *GetIndexEndpoint) HandleHttp(w http.ResponseWriter, r *http.Request){
+  w.Header().Set("Content-Type", "text/html")
+  fmt.Fprintf(w, "Register by clicking here <a href='reg'>HEERRREEE</a>.")
+}
+
+func(this *GetIndexEndpoint) GetRoute() (string, string){
+  return "/", "GET"
+}
+
+
+// **** RegisterUser
+
+type RegisterUserEndpoint struct{
+
+}
+
+func (this *RegisterUserEndpoint) HandleHttp(w http.ResponseWriter, r *http.Request){
+  w.Header().Set("Content-Type", "text/html")
+  //get username from query string / form / whatever
+  username := "username"
+
+
+  success, message := PublishEvent("UserRegistered", UserRegisteredEvent{Username: username})
+  if success{
+      fmt.Fprintf(w, "Done!")
+  } else{
+    fmt.Fprintf(w, "Could not create user: " + message)
+
+  }
+}
+
+func(this *RegisterUserEndpoint) GetRoute() (string, string){
+  return "/reg", "GET"
+}
 
 
 // ** GetUsers
@@ -222,9 +271,6 @@ type GetUsersEndpoint struct{
   store []GetUsersData
 }
 
-// func (this *GetUsersEndpoint) Init() {
-//   this.store =  make([]GetUsersData, 0)
-// }
 
 func (this *GetUsersEndpoint) HandleHttp(w http.ResponseWriter, r *http.Request){
   data2, err := json.Marshal(this.store)
@@ -254,42 +300,11 @@ func (this *GetUsersEndpoint)HandleEvent(event interface{}) {
 }
 
 
-
-// var getUsers_store = make([]GetUsersData, 0)
-
-
-// func GetUsersHandleRegisterUser(data UserRegisteredEvent) {
-// 	getUsers_store = append(getUsers_store, GetUsersData{Username: data.Username})
-// }
-
-// func GetUsersHandleChangeUsername(data ChangeUsernameData) {
-
-// 	for i, user := range getUsers_store {
-// 		if user.Username == data.OriginalName {
-// 			user.Username = data.NewName
-// 			getUsers_store[i] = user
-// 		}
-// 	}
-// }
-
-// func GetUsers(w http.ResponseWriter, r *http.Request) {
-// 	data2, err := json.Marshal(getUsers_store)
-// 	if err != nil {
-// 		fmt.Printf("Result err: %s", err)
-// 	}
-// 	fmt.Fprintf(w, string(data2))
-// }
-
-
 // ** ChangeUsername
 
-type ChangeUsernameEndpoint struct{
- // store []ChangeUsernameData
-}
 
-// func (this *ChangeUsernameEndpoint) Init() {
-//   this.store =  make([]ChangeUsernameData, 0)
-// }
+type ChangeUsernameEndpoint struct{
+}
 
 func (this *ChangeUsernameEndpoint) HandleHttp(w http.ResponseWriter, r *http.Request){
   originalName := "username"
@@ -310,25 +325,6 @@ func(this *ChangeUsernameEndpoint) GetRoute() (string, string){
 
 
 
-type ChangeUsernameData struct {
-	OriginalName string
-	NewName      string
-}
-
-// func ChangeUsername(w http.ResponseWriter, r *http.Request) {
-
-// 	originalName := "username"
-// 	newName := "NEW!" + strconv.FormatInt(time.Now().Unix(), 10)
-
-//   success, message := PublishEvent("UsernameChanged", ChangeUsernameData{OriginalName: originalName, NewName: newName})
-//   if success{
-//       fmt.Fprintf(w, "Done!")
-//   } else {
-//     fmt.Fprintf(w, "Could not change user: " + message)
-//   }
-//  }
-
-
 // ** GetUserByUsername
 
 type GetUserByUsernameData struct {
@@ -340,9 +336,6 @@ type GetUserByUsernameEndpoint struct{
   store []GetUserByUsernameData
 }
 
-// func (this *GetUserByUsernameEndpoint) Init() {
-//   this.store =  make([]GetUserByUsernameData, 0)
-// }
 
 func (this *GetUserByUsernameEndpoint) HandleHttp(w http.ResponseWriter, r *http.Request){
  username := "username"
@@ -384,6 +377,7 @@ func (this *GetUserByUsernameEndpoint)HandleEvent(event interface{}) {
           user.Username = data.NewName
           user.Html = CreateGetUserByUsernameHtml(data.NewName)
           this.store[i] = user
+          break
         }
       }
   }
@@ -391,163 +385,21 @@ func (this *GetUserByUsernameEndpoint)HandleEvent(event interface{}) {
 
 
 
-// // var getUserByUsername_store = make([]GetUserByUsernameData, 0)
-
-// func GetUserByUsername(w http.ResponseWriter, r *http.Request) {
-//   username := "getUsers_store[0].Username"
-
-//   var foundUser *GetUserByUsernameData
-//   for _, user := range getUserByUsername_store {
-//     if user.Username == username{
-//       foundUser = &user
-//       break
-//     }
-//   }
-//   w.Header().Set("Content-Type", "text/html")
-//   if foundUser == nil {
-//     fmt.Fprintf(w, "User not found.")
-
-//   } else{
-
-//     fmt.Fprintf(w, foundUser.Html)
-//   }
-// }
-
-// func CreateGetUserByUsernameHtml(username string) string {
-//   return "<h1>" + username + "</h1>"
-// }
-
-// func GetUserByUsernameHandleRegisterUser(data UserRegisteredEvent) {
-//   getUserByUsername_store = append(getUserByUsername_store, GetUserByUsernameData{Username: data.Username,
-//     Html: CreateGetUserByUsernameHtml(data.Username)})
-// }
-
-// func GetUserByUsernameHandleChangeUsername(data ChangeUsernameData) {
-
-//   for i, user := range getUserByUsername_store {
-//     if user.Username == data.OriginalName {
-//       user.Username = data.NewName
-//       user.Html = CreateGetUserByUsernameHtml(data.NewName)
-//       getUserByUsername_store[i] = user
-//     }
-//   }
-// }
-
-type Endpointer interface{
-  HandleHttp(w http.ResponseWriter, r *http.Request)
-  GetRoute() (string, string)
-}
-
-type EventHandler interface{
-  HandleEvent(event interface{})
-}
-// ***** GetIndex
-
-type GetIndexEndpoint struct{
-
-}
-
-func (this *GetIndexEndpoint) HandleHttp(w http.ResponseWriter, r *http.Request){
-  w.Header().Set("Content-Type", "text/html")
-  fmt.Fprintf(w, "Register by clicking here <a href='reg'>HEERRREEE</a>.")
-}
-
-func(this *GetIndexEndpoint) GetRoute() (string, string){
-  return "/", "GET"
-}
-
-// func (this *GetIndexEndpoint)HandleEvent(event interface{}) {
-//   // switch t := t.(type) {
-//   //   case UserRegisteredEvent:
-
-//   // }
-//   return
-
-// }
-
-// // ** GetIndex
-// func GetIndex(w http.ResponseWriter, r *http.Request) {
-// 	w.Header().Set("Content-Type", "text/html")
-// 	fmt.Fprintf(w, "Register by clicking here <a href='reg'>HEERRREEE</a>.")
-
-// }
-
-
-type RegisterUserEndpoint struct{
-
-}
-
-func (this *RegisterUserEndpoint) HandleHttp(w http.ResponseWriter, r *http.Request){
-  w.Header().Set("Content-Type", "text/html")
-  //get username from query string / form / whatever
-  // username := "Kílian" + strconv.FormatInt(time.Now().Unix(), 10)
-  username := "username"
-
-
-  success, message := PublishEvent("UserRegistered", UserRegisteredEvent{Username: username})
-  if success{
-      fmt.Fprintf(w, "Done!")
-  } else{
-    fmt.Fprintf(w, "Could not create user: " + message)
-
-  }
-
-}
-
-func(this *RegisterUserEndpoint) GetRoute() (string, string){
-  return "/reg", "GET"
-}
-
-// func (this *RegisterUserEndpoint)HandleEvent(event interface{}) {
-//   // switch t := t.(type) {
-//   //   case UserRegisteredEvent:
-
-//   // }
-//   return
-
-// }
 
 
 
-// // ** Register User
-
-// type RegisterUserData struct {
-//   Username string
-// }
-
-// func RegisterUser(w http.ResponseWriter, r *http.Request) {
-//   w.Header().Set("Content-Type", "text/html")
-
-//   //get username from query string / form / whatever
-//   username := "Kílian" + strconv.FormatInt(time.Now().Unix(), 10)
-
-//   if ValidateUniqueUsername(username){
-//       PublishEvent("UserRegistered", UserRegisteredEvent{Username: username})
-//       fmt.Fprintf(w, "Done!")
-//   } else{
-//     fmt.Fprintf(w, "Could not create user: user already exists")
-
-//   }
-// }
 
 
 
-// ** validator
+// ******* Validators
 
 
-type Validater interface{
-  ValidateEvent(event interface{}) (bool, string)
-  HandleEvent(event interface{})
-}
 
 type ValidateUniqueUsername struct{
   store []string
 }
 
-// func(this *ValidateUniqueUsername)Init(){
-//   this.store = make([]string, 0)
-// }
-// var validateUniqueUsername_
+
 
 func (this *ValidateUniqueUsername) ValidateEvent(event interface{}) (bool, string) {
   switch data := event.(type) {
@@ -579,24 +431,10 @@ func (this *ValidateUniqueUsername) HandleEvent(event interface{}) {
         if username == data.OriginalName {
           username := strings.TrimSpace(strings.ToLower(data.NewName))
           this.store[i] = username
+          break
         }
       }
   }
 
 }
-
-
-// func ValidateUniqueUsernameHandleRegisterUser(data UserRegisteredEvent) {
-//   username := strings.TrimSpace(strings.ToLower(data.Username))
-//   validateUniqueUsername_store = append(validateUniqueUsername_store, username)
-// }
-
-// func ValidateUniqueUsernameHandleChangeUsername(data ChangeUsernameData) {
-//   for i, username := range validateUniqueUsername_store {
-//     if username == data.OriginalName {
-//       username := strings.TrimSpace(strings.ToLower(data.NewName))
-//       validateUniqueUsername_store[i] = username
-//     }
-//   }
-// }
 
