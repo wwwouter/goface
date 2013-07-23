@@ -69,13 +69,15 @@ func main() {
 	r := mux.NewRouter()
 
   getIndexEndpoint := GetIndexEndpoint{}
+  eventHandlers = append(eventHandlers, getIndexEndpoint)
   HandleEndpoint(&getIndexEndpoint, r)
 
   registerUserEndpoint := RegisterUserEndpoint{}
+  eventHandlers = append(eventHandlers, registerUserEndpoint)
   HandleEndpoint(&registerUserEndpoint, r)
 
   getUsersEndpoint := GetUsersEndpoint{}
-  // getUsersEndpoint.Init()
+  eventHandlers = append(eventHandlers, getUsersEndpoint)
   HandleEndpoint(&getUsersEndpoint, r)
 
 	// r.HandleFunc("/reg", RegisterUser)
@@ -90,10 +92,11 @@ func main() {
 
 }
 
+
 func HandleEndpoint(endpointer Endpointer, r *mux.Router) {
   path, method := endpointer.GetRoute()
   r.HandleFunc(path, Wrap(endpointer)).Methods(method)
-  eventHandlers = append(eventHandlers, endpointer)
+
 
 }
 
@@ -275,15 +278,17 @@ func (this *GetUsersEndpoint)HandleEvent(event interface{}) {
 
 // ** ChangeUsername
 
-type ChangeUsernameData struct {
-	OriginalName string
-	NewName      string
+type ChangeUsernameEndpoint struct{
+  store []ChangeUsernameData
 }
 
-func ChangeUsername(w http.ResponseWriter, r *http.Request) {
+// func (this *ChangeUsernameEndpoint) Init() {
+//   this.store =  make([]ChangeUsernameData, 0)
+// }
 
-	originalName := "username"
-	newName := "NEW!" + strconv.FormatInt(time.Now().Unix(), 10)
+func (this *ChangeUsernameEndpoint) HandleHttp(w http.ResponseWriter, r *http.Request){
+  originalName := "username"
+  newName := "NEW!" + strconv.FormatInt(time.Now().Unix(), 10)
 
   success, message := PublishEvent("UsernameChanged", ChangeUsernameData{OriginalName: originalName, NewName: newName})
   if success{
@@ -291,7 +296,32 @@ func ChangeUsername(w http.ResponseWriter, r *http.Request) {
   } else {
     fmt.Fprintf(w, "Could not change user: " + message)
   }
- }
+}
+
+func(this *ChangeUsernameEndpoint) GetRoute() (string, string){
+  return "/change", "GET"
+}
+
+
+
+
+// type ChangeUsernameData struct {
+// 	OriginalName string
+// 	NewName      string
+// }
+
+// func ChangeUsername(w http.ResponseWriter, r *http.Request) {
+
+// 	originalName := "username"
+// 	newName := "NEW!" + strconv.FormatInt(time.Now().Unix(), 10)
+
+//   success, message := PublishEvent("UsernameChanged", ChangeUsernameData{OriginalName: originalName, NewName: newName})
+//   if success{
+//       fmt.Fprintf(w, "Done!")
+//   } else {
+//     fmt.Fprintf(w, "Could not change user: " + message)
+//   }
+//  }
 
 
 // ** GetUserByUsername
@@ -345,7 +375,6 @@ func GetUserByUsernameHandleChangeUsername(data ChangeUsernameData) {
 type Endpointer interface{
   HandleHttp(w http.ResponseWriter, r *http.Request)
   GetRoute() (string, string)
-  HandleEvent(event interface{})
 }
 
 type EventHandler interface{
