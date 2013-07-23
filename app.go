@@ -69,21 +69,28 @@ func main() {
 	r := mux.NewRouter()
 
   getIndexEndpoint := GetIndexEndpoint{}
-  eventHandlers = append(eventHandlers, getIndexEndpoint)
+  // eventHandlers = append(eventHandlers, getIndexEndpoint)
   HandleEndpoint(&getIndexEndpoint, r)
 
   registerUserEndpoint := RegisterUserEndpoint{}
-  eventHandlers = append(eventHandlers, registerUserEndpoint)
+  // eventHandlers = append(eventHandlers, registerUserEndpoint)
   HandleEndpoint(&registerUserEndpoint, r)
 
   getUsersEndpoint := GetUsersEndpoint{}
-  eventHandlers = append(eventHandlers, getUsersEndpoint)
+  eventHandlers = append(eventHandlers, &getUsersEndpoint)
   HandleEndpoint(&getUsersEndpoint, r)
+
+  changeUsernameEndpoint := ChangeUsernameEndpoint{}
+  HandleEndpoint(&changeUsernameEndpoint, r)
+
+  getUserByUsernameEndpoint := GetUserByUsernameEndpoint{}
+  eventHandlers = append(eventHandlers, &getUserByUsernameEndpoint)
+  HandleEndpoint(&getUserByUsernameEndpoint, r)
 
 	// r.HandleFunc("/reg", RegisterUser)
 	// r.HandleFunc("/users", GetUsers)
-  r.HandleFunc("/change", ChangeUsername)
-	r.HandleFunc("/user", GetUserByUsername)
+  // r.HandleFunc("/change", ChangeUsername)
+	// r.HandleFunc("/user", GetUserByUsername)
 	http.Handle("/", r)
 	err2 := http.ListenAndServe(":8080", nil)
 	if err2 != nil {
@@ -244,8 +251,6 @@ func (this *GetUsersEndpoint)HandleEvent(event interface{}) {
         }
       }
   }
-  // return
-
 }
 
 
@@ -279,7 +284,7 @@ func (this *GetUsersEndpoint)HandleEvent(event interface{}) {
 // ** ChangeUsername
 
 type ChangeUsernameEndpoint struct{
-  store []ChangeUsernameData
+ // store []ChangeUsernameData
 }
 
 // func (this *ChangeUsernameEndpoint) Init() {
@@ -305,10 +310,10 @@ func(this *ChangeUsernameEndpoint) GetRoute() (string, string){
 
 
 
-// type ChangeUsernameData struct {
-// 	OriginalName string
-// 	NewName      string
-// }
+type ChangeUsernameData struct {
+	OriginalName string
+	NewName      string
+}
 
 // func ChangeUsername(w http.ResponseWriter, r *http.Request) {
 
@@ -326,17 +331,24 @@ func(this *ChangeUsernameEndpoint) GetRoute() (string, string){
 
 // ** GetUserByUsername
 
-var getUserByUsername_store = make([]GetUserByUsernameData, 0)
-
 type GetUserByUsernameData struct {
   Username string
   Html string
 }
-func GetUserByUsername(w http.ResponseWriter, r *http.Request) {
-  username := "getUsers_store[0].Username"
+
+type GetUserByUsernameEndpoint struct{
+  store []GetUserByUsernameData
+}
+
+// func (this *GetUserByUsernameEndpoint) Init() {
+//   this.store =  make([]GetUserByUsernameData, 0)
+// }
+
+func (this *GetUserByUsernameEndpoint) HandleHttp(w http.ResponseWriter, r *http.Request){
+ username := "username"
 
   var foundUser *GetUserByUsernameData
-  for _, user := range getUserByUsername_store {
+  for _, user := range this.store {
     if user.Username == username{
       foundUser = &user
       break
@@ -352,25 +364,74 @@ func GetUserByUsername(w http.ResponseWriter, r *http.Request) {
   }
 }
 
+func(this *GetUserByUsernameEndpoint) GetRoute() (string, string){
+  return "/user", "GET"
+}
+
+
 func CreateGetUserByUsernameHtml(username string) string {
   return "<h1>" + username + "</h1>"
 }
 
-func GetUserByUsernameHandleRegisterUser(data UserRegisteredEvent) {
-  getUserByUsername_store = append(getUserByUsername_store, GetUserByUsernameData{Username: data.Username,
-    Html: CreateGetUserByUsernameHtml(data.Username)})
-}
-
-func GetUserByUsernameHandleChangeUsername(data ChangeUsernameData) {
-
-  for i, user := range getUserByUsername_store {
-    if user.Username == data.OriginalName {
-      user.Username = data.NewName
-      user.Html = CreateGetUserByUsernameHtml(data.NewName)
-      getUserByUsername_store[i] = user
-    }
+func (this *GetUserByUsernameEndpoint)HandleEvent(event interface{}) {
+  switch data := event.(type) {
+    case UserRegisteredEvent:
+      this.store = append(this.store, GetUserByUsernameData{Username: data.Username,
+        Html: CreateGetUserByUsernameHtml(data.Username)})
+    case ChangeUsernameData:
+      for i, user := range this.store {
+        if user.Username == data.OriginalName {
+          user.Username = data.NewName
+          user.Html = CreateGetUserByUsernameHtml(data.NewName)
+          this.store[i] = user
+        }
+      }
   }
 }
+
+
+
+// // var getUserByUsername_store = make([]GetUserByUsernameData, 0)
+
+// func GetUserByUsername(w http.ResponseWriter, r *http.Request) {
+//   username := "getUsers_store[0].Username"
+
+//   var foundUser *GetUserByUsernameData
+//   for _, user := range getUserByUsername_store {
+//     if user.Username == username{
+//       foundUser = &user
+//       break
+//     }
+//   }
+//   w.Header().Set("Content-Type", "text/html")
+//   if foundUser == nil {
+//     fmt.Fprintf(w, "User not found.")
+
+//   } else{
+
+//     fmt.Fprintf(w, foundUser.Html)
+//   }
+// }
+
+// func CreateGetUserByUsernameHtml(username string) string {
+//   return "<h1>" + username + "</h1>"
+// }
+
+// func GetUserByUsernameHandleRegisterUser(data UserRegisteredEvent) {
+//   getUserByUsername_store = append(getUserByUsername_store, GetUserByUsernameData{Username: data.Username,
+//     Html: CreateGetUserByUsernameHtml(data.Username)})
+// }
+
+// func GetUserByUsernameHandleChangeUsername(data ChangeUsernameData) {
+
+//   for i, user := range getUserByUsername_store {
+//     if user.Username == data.OriginalName {
+//       user.Username = data.NewName
+//       user.Html = CreateGetUserByUsernameHtml(data.NewName)
+//       getUserByUsername_store[i] = user
+//     }
+//   }
+// }
 
 type Endpointer interface{
   HandleHttp(w http.ResponseWriter, r *http.Request)
@@ -380,6 +441,7 @@ type Endpointer interface{
 type EventHandler interface{
   HandleEvent(event interface{})
 }
+// ***** GetIndex
 
 type GetIndexEndpoint struct{
 
@@ -394,14 +456,14 @@ func(this *GetIndexEndpoint) GetRoute() (string, string){
   return "/", "GET"
 }
 
-func (this *GetIndexEndpoint)HandleEvent(event interface{}) {
-  // switch t := t.(type) {
-  //   case UserRegisteredEvent:
+// func (this *GetIndexEndpoint)HandleEvent(event interface{}) {
+//   // switch t := t.(type) {
+//   //   case UserRegisteredEvent:
 
-  // }
-  return
+//   // }
+//   return
 
-}
+// }
 
 // // ** GetIndex
 // func GetIndex(w http.ResponseWriter, r *http.Request) {
@@ -436,14 +498,14 @@ func(this *RegisterUserEndpoint) GetRoute() (string, string){
   return "/reg", "GET"
 }
 
-func (this *RegisterUserEndpoint)HandleEvent(event interface{}) {
-  // switch t := t.(type) {
-  //   case UserRegisteredEvent:
+// func (this *RegisterUserEndpoint)HandleEvent(event interface{}) {
+//   // switch t := t.(type) {
+//   //   case UserRegisteredEvent:
 
-  // }
-  return
+//   // }
+//   return
 
-}
+// }
 
 
 
